@@ -6,7 +6,7 @@ import {
   Button
 } from 'reactstrap'
 import styled, {injectGlobal} from 'styled-components'
-
+import socket from '../../utils/socket'
 import YouTube from 'react-youtube'
 
 const YoutubePlayer = styled(YouTube)`
@@ -17,21 +17,43 @@ const YoutubePlayer = styled(YouTube)`
 
 export default class Warpper extends React.Component {
   state = {
+    video: {},
     id: '',
-    idString: ''
+    idString: '',
+    action: 'pause'
   }
 
   _handleChange = ({target:{value}}) => {
+    let id = value.substring(value.indexOf('=')+1, value.length)
     this.setState({
-      idString: value
+      idString: id
     })
   }
 
-  _handleClick = () => {
+  _handleClick = async () => {
+    let id = await this.state.idString
+    socket.emit('video', {id: id})
     this.setState({
-      id: this.state.idString,
       idString: ''
     })
+  }
+  
+  _handleVideo = async (action) => {
+    socket.emit('action', {action: action})
+  }
+
+  _onReady = ({target}) => {
+    this.setState({
+      video: target
+    })
+  }
+
+  _stateChange = ({data}) => {
+    if (data === 1) {
+      this._handleVideo('play')
+    } else {
+      this._handleVideo('pause')
+    }
   }
 
   componentWillMount() {
@@ -42,6 +64,32 @@ export default class Warpper extends React.Component {
     `
   }
 
+  componentDidMount() {
+    socket.on('video',({id}) => {
+      this.setState({
+        id: id
+      })
+    })
+    
+    socket.on('action',({action}) => {
+      this.setState({
+        action: action
+      })
+      this._handleAction(action)
+    })
+  }
+
+  _handleAction = (action) => {
+    switch (action) {
+      case 'play':
+        this.state.video.playVideo()
+        break
+      default:
+        this.state.video.pauseVideo()
+        break
+    }
+  }
+
   render() {
     return (
       <div className="container-fluid">
@@ -50,6 +98,7 @@ export default class Warpper extends React.Component {
             <YoutubePlayer
               videoId={this.state.id}
               onReady={this._onReady}
+              onStateChange={this._stateChange}
             />
           </div>
         </div>
@@ -59,10 +108,10 @@ export default class Warpper extends React.Component {
               <div className="col-12 col-md-2 justify-content-center align-items-center">
                 <InputGroup>
                   <InputGroupAddon addonType="prepend">
-                    <Button color="primary">Play</Button>
+                    <Button onClick={() => this._handleVideo('play')} color="primary">Play</Button>
                   </InputGroupAddon>
                   <InputGroupAddon addonType="append">
-                    <Button color="danger">Pause</Button>
+                    <Button onClick={() => this._handleVideo('pause')} color="danger">Pause</Button>
                   </InputGroupAddon>
                 </InputGroup>
               </div>
