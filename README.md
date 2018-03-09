@@ -1,6 +1,9 @@
 # Watch Together
 > an application for a couple 💏 that wants to watch videos on youtube together.
 
+# Screenshot
+[![demo](https://github.com/imgrbs/watch-together/raw/master/src/demo.png)](#features)
+
 # System Requirments
 - Node.js v 8.9.2 ++
 - NPM or Yarn
