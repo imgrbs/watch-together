@@ -1,13 +1,10 @@
 import React from 'react'
-import {
-  InputGroup,
-  InputGroupAddon,
-  Input,
-  Button
-} from 'reactstrap'
 import styled, {injectGlobal} from 'styled-components'
-import socket from '../../utils/socket'
 import YouTube from 'react-youtube'
+
+import socket from '../../utils/socket'
+
+import InputGroup from './InputGroup'
 
 const YoutubePlayer = styled(YouTube)`
   min-height: 630px;
@@ -17,29 +14,45 @@ const YoutubePlayer = styled(YouTube)`
 
 export default class Warpper extends React.Component {
   state = {
+    room: 'default',
+    join: false,
     video: {},
     id: '',
     idString: '',
-    action: 'pause'
+    status: 0
   }
 
-  _handleChange = ({target:{value}}) => {
-    let id = value.substring(value.indexOf('=')+1, value.length)
+  _handleChange = ({target: {value}}) => {
     this.setState({
-      idString: id
+      idString: value
     })
   }
 
+  _handleRoom = ({target: {value}}) => {
+    this.setState({
+      room: value
+    })
+  }
+
+  _handleJoin = async () => {
+    await window.localStorage.setItem('room', this.state.room)
+    this.setState({
+      join: true
+    })
+    window.location.reload()
+  }
+
+  convertUrl = (value) => value.substring(value.indexOf('=') + 1, value.length)
+
   _handleClick = async () => {
-    let id = await this.state.idString
-    socket.emit('video', {id: id})
+    let id = await this.convertUrl(this.state.idString)
+    socket.emit('video', {
+      room: this.state.room,
+      id: id
+    })
     this.setState({
       idString: ''
     })
-  }
-  
-  _handleVideo = async (action) => {
-    socket.emit('action', {action: action})
   }
 
   _onReady = ({target}) => {
@@ -48,15 +61,32 @@ export default class Warpper extends React.Component {
     })
   }
 
-  _stateChange = ({data}) => {
-    if (data === 1) {
-      this._handleVideo('play')
-    } else {
-      this._handleVideo('pause')
+  _stateChange = async ({data}) => {
+    console.log(this.state.video.getPlayerState())
+    if (this.state.status !== this.state.video.getPlayerState()) {
+      switch (this.state.video.getPlayerState()) {
+        case 1:
+          this._handleVideo()
+          break
+        case 3:
+          this._handleVideo(this.state.video.getCurrentTime())
+          break
+        default:
+          this._handleVideo()
+          break
+      }
     }
   }
 
-  componentWillMount() {
+  _handleVideo = async (data) => {
+    socket.emit(`action`, {
+      room: this.state.room,
+      status: this.state.video.getPlayerState(),
+      time: data
+    })
+  }
+
+  componentWillMount () {
     injectGlobal`
       body {
         background: black;
@@ -64,37 +94,41 @@ export default class Warpper extends React.Component {
     `
   }
 
-  componentDidMount() {
-    socket.on('video',({id}) => {
+  async componentDidMount () {
+    const room = await window.localStorage.getItem('room') || this.state.room
+    this.setState({
+      room: room
+    })
+
+    socket.on(`${room}`, ({id}) => {
       this.setState({
         id: id
       })
     })
-    
-    socket.on('action',({action}) => {
+
+    socket.on(`action_${room}`, (data) => {
       this.setState({
-        action: action
+        status: data.status
       })
-      this._handleAction(action)
+      switch (data.status) {
+        case 1:
+          this.state.video.playVideo()
+          break
+        case 3:
+          this.state.video.seekTo(data.time)
+          break
+        default:
+          this.state.video.pauseVideo()
+          break
+      }
     })
   }
 
-  _handleAction = (action) => {
-    switch (action) {
-      case 'play':
-        this.state.video.playVideo()
-        break
-      default:
-        this.state.video.pauseVideo()
-        break
-    }
-  }
-
-  render() {
+  render () {
     return (
-      <div className="container-fluid">
-        <div className="row mb-3">
-          <div className="col-12">
+      <div className='container-fluid'>
+        <div className='row mb-3'>
+          <div className='col-12'>
             <YoutubePlayer
               videoId={this.state.id}
               onReady={this._onReady}
@@ -102,33 +136,33 @@ export default class Warpper extends React.Component {
             />
           </div>
         </div>
-        <div className="row">
-          <div className="container">
-            <div className="row">
-              <div className="col-12 col-md-2 justify-content-center align-items-center">
-                <InputGroup>
-                  <InputGroupAddon addonType="prepend">
-                    <Button onClick={() => this._handleVideo('play')} color="primary">Play</Button>
-                  </InputGroupAddon>
-                  <InputGroupAddon addonType="append">
-                    <Button onClick={() => this._handleVideo('pause')} color="danger">Pause</Button>
-                  </InputGroupAddon>
-                </InputGroup>
+        <div className='row'>
+          <div className='container'>
+            <div className='row'>
+              <div className='col-12 mb-3 col-md-6'>
+                <InputGroup
+                  color={`success`}
+                  name={`Room`}
+                  readOnly={this.state.join}
+                  state={this.state.room}
+                  handleState={this._handleRoom}
+                  placeholder={''}
+                  handleClick={this._handleJoin}
+                  btnName={`Join`}
+                />
               </div>
-              <div className="col-12 col-md-10">
-                <InputGroup>
-                  <InputGroupAddon addonType="prepend">
-                    <Button color="danger">Youtube URL</Button>
-                  </InputGroupAddon>
-                  <Input
-                    value={this.state.idString}
-                    onChange={this._handleChange}
-                    placeholder="eg. https://www.youtube.com/watch?v=k_0a3Dsih3A"
-                  />
-                  <InputGroupAddon addonType="append">
-                    <Button onClick={this._handleClick} color="primary">Watch!</Button>
-                  </InputGroupAddon>
-                </InputGroup>
+
+              <div className='col-12 mb-3 col-md-6'>
+                <InputGroup
+                  color={`danger`}
+                  name={`Youtube URL`}
+                  readOnly={false}
+                  state={this.state.idString}
+                  handleState={this._handleChange}
+                  placeholder={`eg. https://www.youtube.com/watch?v=k_0a3Dsih3A`}
+                  handleClick={this._handleClick}
+                  btnName={`Watch!`}
+                />
               </div>
             </div>
           </div>
